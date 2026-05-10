@@ -23,9 +23,6 @@ const CODEX_SHARED_SESSIONS_DIR_NAME: &str = "sessions";
 const CODEX_SHARED_ARCHIVED_SESSIONS_DIR_NAME: &str = "archived_sessions";
 const CODEX_SHARED_SESSION_INDEX_FILE_NAME: &str = "session_index.jsonl";
 const CODEX_SHARED_GLOBAL_STATE_FILE_NAME: &str = ".codex-global-state.json";
-const CODEX_SHARED_STATE_DB_FILE_NAME: &str = "state_5.sqlite";
-const CODEX_SHARED_STATE_DB_WAL_FILE_NAME: &str = "state_5.sqlite-wal";
-const CODEX_SHARED_STATE_DB_SHM_FILE_NAME: &str = "state_5.sqlite-shm";
 
 pub fn is_api_service_bind_account_id(account_id: &str) -> bool {
     account_id.trim() == CODEX_API_SERVICE_BIND_ACCOUNT_ID
@@ -611,7 +608,7 @@ fn copy_missing_directory_entries(source: &Path, target: &Path) -> Result<(), St
     }
     fs::create_dir_all(target).map_err(|e| {
         format!(
-            "åˆ›å»ºå…±äº«ç›®å½•åˆå¹¶ç›®æ ‡å¤±è´¥ ({}): {}",
+            "create shared directory merge target failed ({}): {}",
             display_abs_path(target),
             e
         )
@@ -619,17 +616,17 @@ fn copy_missing_directory_entries(source: &Path, target: &Path) -> Result<(), St
 
     for entry in fs::read_dir(source).map_err(|e| {
         format!(
-            "è¯»å–å…±äº«ç›®å½•åˆå¹¶æ¥æºå¤±è´¥ ({}): {}",
+            "read shared directory merge source failed ({}): {}",
             display_abs_path(source),
             e
         )
     })? {
-        let entry = entry.map_err(|e| format!("è¯»å–å…±äº«ç›®å½•é¡¹å¤±è´¥: {}", e))?;
+        let entry = entry.map_err(|e| format!("read shared directory entry failed: {}", e))?;
         let source_path = entry.path();
         let target_path = target.join(entry.file_name());
         let source_meta = fs::symlink_metadata(&source_path).map_err(|e| {
             format!(
-                "è¯»å–å…±äº«ç›®å½•åˆå¹¶æ¥æºé¡¹å¤±è´¥ ({}): {}",
+                "read shared directory merge source entry failed ({}): {}",
                 display_abs_path(&source_path),
                 e
             )
@@ -646,7 +643,7 @@ fn copy_missing_directory_entries(source: &Path, target: &Path) -> Result<(), St
 
         fs::copy(&source_path, &target_path).map_err(|e| {
             format!(
-                "åˆå¹¶å…±äº«ç›®å½•æ–‡ä»¶å¤±è´¥ ({} -> {}): {}",
+                "merge shared directory file failed ({} -> {}): {}",
                 display_abs_path(&source_path),
                 display_abs_path(&target_path),
                 e
@@ -668,7 +665,7 @@ fn sync_shared_directory_preserving_entries(
 
     fs::create_dir_all(&global_dir).map_err(|e| {
         format!(
-            "åˆ›å»ºå…¨å±€å…±äº«ç›®å½•å¤±è´¥ ({}): {}",
+            "create global shared directory failed ({}): {}",
             display_abs_path(&global_dir),
             e
         )
@@ -676,7 +673,7 @@ fn sync_shared_directory_preserving_entries(
     if let Some(parent) = instance_dir.parent() {
         fs::create_dir_all(parent).map_err(|e| {
             format!(
-                "åˆ›å»ºå®žä¾‹å…±äº«ç›®å½•çˆ¶è·¯å¾„å¤±è´¥ ({}): {}",
+                "create instance shared directory parent failed ({}): {}",
                 display_abs_path(parent),
                 e
             )
@@ -689,7 +686,7 @@ fn sync_shared_directory_preserving_entries(
 
     let metadata = fs::symlink_metadata(&instance_dir).map_err(|e| {
         format!(
-            "è¯»å–å®žä¾‹å…±äº«ç›®å½•ä¿¡æ¯å¤±è´¥ ({}): {}",
+            "read instance shared directory metadata failed ({}): {}",
             display_abs_path(&instance_dir),
             e
         )
@@ -697,7 +694,7 @@ fn sync_shared_directory_preserving_entries(
     if metadata.file_type().is_symlink() {
         let current_target = fs::read_link(&instance_dir).map_err(|e| {
             format!(
-                "è¯»å–å®žä¾‹å…±äº«ç›®å½•é“¾æŽ¥å¤±è´¥ ({}): {}",
+                "read instance shared directory link failed ({}): {}",
                 display_abs_path(&instance_dir),
                 e
             )
@@ -716,7 +713,7 @@ fn sync_shared_directory_preserving_entries(
 
     if !metadata.is_dir() {
         return Err(format!(
-            "å®žä¾‹å…±äº«ç›®å½•è·¯å¾„ä¸æ˜¯ç›®å½• ({}): {}",
+            "instance shared directory path is not a directory ({}): {}",
             relative_display,
             display_abs_path(&instance_dir)
         ));
@@ -725,14 +722,14 @@ fn sync_shared_directory_preserving_entries(
     copy_missing_directory_entries(&instance_dir, &global_dir)?;
     fs::remove_dir_all(&instance_dir).map_err(|e| {
         format!(
-            "æ¸…ç†å®žä¾‹å…±äº«ç›®å½•å¤±è´¥ ({}): {}",
+            "clean instance shared directory failed ({}): {}",
             display_abs_path(&instance_dir),
             e
         )
     })?;
     create_directory_live_link(&global_dir, &instance_dir).map_err(|e| {
         format!(
-            "é‡å»ºå®žä¾‹å…±äº«ç›®å½•é“¾æŽ¥å¤±è´¥ ({} -> {}, {}): {}",
+            "rebuild instance shared directory link failed ({} -> {}, {}): {}",
             display_abs_path(&global_dir),
             display_abs_path(&instance_dir),
             relative_display,
@@ -904,7 +901,7 @@ fn backup_instance_shared_file_if_needed(
 
     let instance_meta = fs::symlink_metadata(&instance_file).map_err(|e| {
         format!(
-            "è¯»å–å®žä¾‹å…±äº«æ–‡ä»¶ä¿¡æ¯å¤±è´¥ ({}): {}",
+            "read instance shared history file metadata failed ({}): {}",
             display_abs_path(&instance_file),
             e
         )
@@ -923,7 +920,7 @@ fn backup_instance_shared_file_if_needed(
     if let Some(parent) = backup_path.parent() {
         fs::create_dir_all(parent).map_err(|e| {
             format!(
-                "åˆ›å»ºå…±äº«åŽ†å²å¤‡ä»½ç›®å½•å¤±è´¥ ({}): {}",
+                "create shared history backup directory failed ({}): {}",
                 display_abs_path(parent),
                 e
             )
@@ -931,7 +928,7 @@ fn backup_instance_shared_file_if_needed(
     }
     fs::copy(&instance_file, &backup_path).map_err(|e| {
         format!(
-            "å¤‡ä»½å®žä¾‹åŽ†å²æ–‡ä»¶å¤±è´¥ ({} -> {}): {}",
+            "backup instance history file failed ({} -> {}): {}",
             display_abs_path(&instance_file),
             display_abs_path(&backup_path),
             e
@@ -996,21 +993,6 @@ pub fn ensure_instance_shared_skills(profile_dir: &Path) -> Result<(), String> {
         profile_dir,
         &default_codex_home,
         Path::new(CODEX_SHARED_GLOBAL_STATE_FILE_NAME),
-    )?;
-    sync_shared_history_file(
-        profile_dir,
-        &default_codex_home,
-        Path::new(CODEX_SHARED_STATE_DB_FILE_NAME),
-    )?;
-    sync_shared_history_file(
-        profile_dir,
-        &default_codex_home,
-        Path::new(CODEX_SHARED_STATE_DB_WAL_FILE_NAME),
-    )?;
-    sync_shared_history_file(
-        profile_dir,
-        &default_codex_home,
-        Path::new(CODEX_SHARED_STATE_DB_SHM_FILE_NAME),
     )?;
 
     Ok(())
@@ -1370,15 +1352,19 @@ mod tests {
         let root = make_temp_dir("codex-file-hard-link-test");
         let default_home = root.join("default");
         let profile_dir = root.join("instance");
-        let global_file = default_home.join("state_5.sqlite");
-        let instance_file = profile_dir.join("state_5.sqlite");
+        let global_file = default_home.join("session_index.jsonl");
+        let instance_file = profile_dir.join("session_index.jsonl");
         fs::create_dir_all(&default_home).expect("create default home");
         fs::create_dir_all(&profile_dir).expect("create profile dir");
         fs::write(&global_file, "shared").expect("write global file");
         fs::hard_link(&global_file, &instance_file).expect("create instance hard link");
 
-        sync_shared_file(&profile_dir, &default_home, Path::new("state_5.sqlite"))
-            .expect("sync shared hard-linked file");
+        sync_shared_file(
+            &profile_dir,
+            &default_home,
+            Path::new("session_index.jsonl"),
+        )
+        .expect("sync shared hard-linked file");
 
         assert!(files_are_same_entry(&instance_file, &global_file).expect("compare file entries"));
         fs::write(&global_file, "updated").expect("update global hard-linked file");
